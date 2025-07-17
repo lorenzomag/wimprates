@@ -14,9 +14,15 @@ Installation and usage
  - `pip install wimprates`
  - [See this basic example for usage.](https://github.com/JelleAalbers/wimprates/blob/master/notebooks/Example.ipynb)
 
-The package uses numericalunits (https://pypi.python.org/pypi/numericalunits); all function inputs
+The package uses `numericalunits` (https://pypi.python.org/pypi/numericalunits); all function inputs
 are expected to have proper units (except for the `rate_wimp_std` convenience function).
 
+The package uses `logging` package. To see messages of level INFO or lower, initialise your logger's handler as follows at the beginning of your code:
+```python
+import logging
+logging.basicConfig(level=logging.INFO) # use logging.DEBUG if desired
+```
+For further info, check the package's documentation for the right version of python: https://docs.python.org/3.11/howto/logging.html#configuring-logging-for-a-library
 
 Features
 --------

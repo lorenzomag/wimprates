@@ -167,7 +167,7 @@ def save_result(func: Callable) -> Callable[..., Any]:
         # Check if the result is already cached
         if load_cache and os.path.exists(cache_file):
             with open(cache_file, "rb") as f:
-                logger.info(f"Loading from cache: {cache_file}")
+                logger.debug(f"Loading from cache: {cache_file}")
                 return pickle.load(f)
 
         # Compute the result
@@ -181,7 +181,7 @@ def save_result(func: Callable) -> Callable[..., Any]:
             # Save the result to the cache
             with open(cache_file, "wb") as f:
                 pickle.dump(result, f)
-                logger.info(f"Result saved to cache: {cache_file}")
+                logger.debug(f"Result saved to cache: {cache_file}")
 
         return result
 

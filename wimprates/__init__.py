@@ -2,8 +2,9 @@ __version__ = '0.5.0'
 
 from packaging import version
 if version.parse(__version__) < version.parse('0.6.0'):
-    import warnings
-    warnings.warn(
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(
         'Default WIMP parameters are changed in accordance with '
         'https://arxiv.org/abs/2105.00599 (github.com/JelleAalbers/wimprates/pull/14)')
 
