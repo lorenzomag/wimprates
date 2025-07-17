@@ -1,12 +1,15 @@
 """
 Summary functions
 """
+import logging
 import numericalunits as nu
-nu.reset_units(42)  # Comment this line this when debugging dimensional analysis errors
 
 import wimprates as wr
-export, __all__ = wr.exporter()
 
+
+nu.reset_units(42)  # Comment this line this when debugging dimensional analysis errors
+logger = logging.getLogger(__name__)
+export, __all__ = wr.exporter()
 
 @export
 @wr.save_result

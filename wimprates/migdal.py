@@ -12,22 +12,22 @@ Two implemented models:
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
-import os
-from typing import Any, Optional, Union
-
 from fnmatch import fnmatch
 from functools import lru_cache, partial
+import logging
 import numericalunits as nu
 import numpy as np
-from tqdm.autonotebook import tqdm
+import os
 import pandas as pd
 from scipy.integrate import dblquad
 from scipy.interpolate import interp1d
+from typing import Any, Optional, Union
+from tqdm.autonotebook import tqdm
 
 import wimprates as wr
 
-
 export, __all__ = wr.exporter()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

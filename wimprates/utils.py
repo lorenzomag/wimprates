@@ -1,6 +1,7 @@
 import functools
 import hashlib
 import inspect
+import logging
 import os
 import pickle
 from typing import Any, Callable
@@ -12,6 +13,7 @@ from tqdm.autonotebook import tqdm
 
 import wimprates as wr
 
+logger = logging.getLogger(__name__)
 
 def exporter():
     """Export utility modified from https://stackoverflow.com/a/41895194
@@ -165,7 +167,7 @@ def save_result(func: Callable) -> Callable[..., Any]:
         # Check if the result is already cached
         if load_cache and os.path.exists(cache_file):
             with open(cache_file, "rb") as f:
-                print("Loading from cache: ", cache_file)
+                logger.info(f"Loading from cache: {cache_file}")
                 return pickle.load(f)
 
         # Compute the result
@@ -179,7 +181,7 @@ def save_result(func: Callable) -> Callable[..., Any]:
             # Save the result to the cache
             with open(cache_file, "wb") as f:
                 pickle.dump(result, f)
-                print("Result saved to cache: ", cache_file)
+                logger.info(f"Result saved to cache: {cache_file}")
 
         return result
 
