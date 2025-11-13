@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Central cache for all modules
 CACHE_DIR = Path.home() / ".cache" / "wimprates"
+logger.info(f"Wimprates will cache results at this directory: {CACHE_DIR}")
 os.makedirs(CACHE_DIR, exist_ok=True)
 memory = Memory(CACHE_DIR, verbose=0)
 
