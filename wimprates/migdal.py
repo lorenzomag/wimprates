@@ -85,7 +85,7 @@ def _default_shells(material: str) -> tuple[str]:
         # For Xe, only consider n=3 and n=4
         # n=5 is the valence band so unreliable in liquid
         # n=1,2 contribute very little
-        Xe=["3*", "4*"],
+        Xe=["1*", "2*", "3*", "4*"],
         # TODO, what are realistic values for Ar?
         Ar=["2*"],
         # EDELWEIS
@@ -96,13 +96,13 @@ def _default_shells(material: str) -> tuple[str]:
 
 
 def _create_cox_probability_function(
-    element,
+    cox_migdal_model,
     orbital: str,
     dipole: bool = False,
 ) -> Callable[..., np.ndarray[Any, Any]]:
-
+    
     fn_name = "dpI1dipole" if dipole else "dpI1"
-    fn = getattr(element, fn_name)
+    fn = getattr(cox_migdal_model, fn_name)
 
     return partial(fn, orbital=orbital)
 
@@ -111,7 +111,7 @@ def _create_cox_probability_function(
 def get_migdal_transitions_probability_iterators(
     material: str = "Xe",
     model: str = "Ibe",
-    considered_shells: Optional[Union[tuple[str], str]] = None,
+    considered_shells: Optional[tuple[str]] = None,
     dark_matter: bool = True,
     e_threshold: Optional[float] = None,
     dipole: bool = False,
@@ -173,7 +173,7 @@ def get_migdal_transitions_probability_iterators(
             shells.append(Shell(state, material, binding_e, model, p))
 
     elif model == "Cox":
-        element = wr.cox_migdal_model(
+        cox_migdal_model = wr.cox_migdal_model(
             material,
             dipole=dipole,
             dark_matter=dark_matter,
@@ -181,7 +181,7 @@ def get_migdal_transitions_probability_iterators(
             **kwargs
         )
 
-        for state, binding_e in element.orbitals:
+        for state, binding_e in cox_migdal_model.orbitals:
             if not any(fnmatch(state, take) for take in considered_shells):
                 continue
 
@@ -192,7 +192,7 @@ def get_migdal_transitions_probability_iterators(
                     binding_e * nu.keV,
                     model,
                     single_ionization_probability=_create_cox_probability_function(
-                        element,
+                        cox_migdal_model,
                         state,
                         dipole=dipole,
                     ),
@@ -260,7 +260,7 @@ def get_diff_rate(
                     * (nu.me * (2 * erec / wr.mn(material)) ** 0.5 / (nu.eV / nu.c0))
                     ** 2
                     / (2 * np.pi)
-                    * shell(eelec)
+                    * np.nan_to_num(shell(eelec))
                 )
             elif migdal_model == "Cox":
                 vrec = (2 * erec / wr.mn(material)) ** 0.5 / nu.c0
@@ -277,7 +277,7 @@ def get_diff_rate(
                     )
                     * v
                     * halo_model.velocity_dist(v, t)
-                    * shell(input_points) / nu.keV
+                    * np.nan_to_num(shell(input_points)) / nu.keV
                 )
 
         # Note dblquad expects the function to be f(y, x), not f(x, y)...
