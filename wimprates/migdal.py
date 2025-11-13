@@ -25,6 +25,7 @@ from typing import Any, Optional, Union
 from tqdm.autonotebook import tqdm
 
 import wimprates as wr
+from .utils import memory
 
 export, __all__ = wr.exporter()
 logger = logging.getLogger(__name__)
@@ -298,6 +299,7 @@ def get_diff_rate(
 
 
 @export
+@memory.cache(ignore=["multi_processing", "progress_bar"])
 def rate_migdal(
     w: Union[np.ndarray, float],
     mw: float,
