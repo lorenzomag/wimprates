@@ -1,6 +1,9 @@
 import functools
 import inspect
+from joblib import Memory
+import logging
 import os
+from pathlib import Path
 import pickle
 import warnings
 
@@ -8,6 +11,15 @@ from boltons.funcutils import wraps
 import numpy as np
 from tqdm.autonotebook import tqdm
 
+import wimprates as wr
+
+logger = logging.getLogger(__name__)
+
+# Central cache for all modules
+CACHE_DIR = Path.home() / ".cache" / "wimprates"
+logger.info(f"Wimprates will cache results at this directory: {CACHE_DIR}")
+os.makedirs(CACHE_DIR, exist_ok=True)
+memory = Memory(CACHE_DIR, verbose=0)
 
 def exporter():
     """Export utility modified from https://stackoverflow.com/a/41895194
@@ -107,6 +119,7 @@ def pairwise_log_transform(a, b):
     b = np.atleast_1d(b).reshape(-1, 1)
     arr = np.concatenate((a, b), axis=1)
     return np.log(arr)
+
 
 @export
 def deprecated(reason):

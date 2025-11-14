@@ -1,13 +1,19 @@
 """
 Summary functions
 """
+import logging
 import numericalunits as nu
 
 import wimprates as wr
+from .utils import memory
+
+
+nu.reset_units(42)  # Comment this line this when debugging dimensional analysis errors
+logger = logging.getLogger(__name__)
 export, __all__ = wr.exporter()
 
-
 @export
+@memory.cache
 def rate_wimp(es, mw, sigma_nucleon, interaction='SI',
               detection_mechanism='elastic_nr', m_med=float('inf'),
               t=None, halo_model=None, 
@@ -61,6 +67,7 @@ def rate_wimp(es, mw, sigma_nucleon, interaction='SI',
 
 
 @export
+@memory.cache
 def rate_wimp_std(es, mw, sigma_nucleon, m_med=float('inf'),
                   t=None, halo_model=None, **kwargs):
     """Differential rate per (ton year keV) of WIMP-nucleus scattering.

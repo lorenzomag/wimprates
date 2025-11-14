@@ -10,21 +10,25 @@ Two implemented models:
 """
 
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Optional, Union
-
 from fnmatch import fnmatch
-from functools import lru_cache
+from functools import lru_cache, partial
+import logging
 import numericalunits as nu
 import numpy as np
+import os
 import pandas as pd
 from scipy.integrate import dblquad
 from scipy.interpolate import interp1d
+from typing import Any, Optional, Union
+from tqdm.autonotebook import tqdm
 
 import wimprates as wr
-
+from .utils import memory
 
 export, __all__ = wr.exporter()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -68,7 +72,7 @@ class Shell:
         return self.name[1:]
 
 
-def _default_shells(material: str) -> list[str]:
+def _default_shells(material: str) -> tuple[str]:
     """
     Returns the default shells to consider for a given material.
     Args:
@@ -81,52 +85,33 @@ def _default_shells(material: str) -> list[str]:
         # For Xe, only consider n=3 and n=4
         # n=5 is the valence band so unreliable in liquid
         # n=1,2 contribute very little
-        Xe=["3*", "4*"],
+        Xe=["1*", "2*", "3*", "4*"],
         # TODO, what are realistic values for Ar?
         Ar=["2*"],
         # EDELWEIS
         Ge=["3*"],
         Si=["2*"],
     )
-    return consider_shells[material]
+    return tuple(consider_shells[material])
 
 
-def create_cox_probability_function(
-    element,
-    state: str,
-    material: str,
+def _create_cox_probability_function(
+    cox_migdal_model,
+    orbital: str,
     dipole: bool = False,
 ) -> Callable[..., np.ndarray[Any, Any]]:
-
+    
     fn_name = "dpI1dipole" if dipole else "dpI1"
-    fn = getattr(element, fn_name)
+    fn = getattr(cox_migdal_model, fn_name)
 
-    def get_probability(
-        e: Union[float, np.ndarray],  # energy of released electron
-        erec: Optional[Union[float, np.ndarray]] = None,  # recoil energy
-        v: Optional[Union[float, np.ndarray]] = None,  # recoil speed
-    ) -> np.ndarray:
-        if erec is None:
-            if v is None:
-                raise ValueError("Either v or erec have to be provided")
-        elif v is None:
-            v = (2 * erec / wr.mn(material)) ** 0.5 / nu.c0
-        else:
-            raise ValueError("Either v or erec have to be provided")
-
-        e /= nu.keV
-
-        input_points = wr.pairwise_log_transform(e, v)
-        return fn(input_points, state) / nu.keV  # type: ignore
-
-    return get_probability
+    return partial(fn, orbital=orbital)
 
 
 @export
 def get_migdal_transitions_probability_iterators(
     material: str = "Xe",
     model: str = "Ibe",
-    considered_shells: Optional[Union[list[str], str]] = None,
+    considered_shells: Optional[tuple[str]] = None,
     dark_matter: bool = True,
     e_threshold: Optional[float] = None,
     dipole: bool = False,
@@ -164,7 +149,7 @@ def get_migdal_transitions_probability_iterators(
                     6.1e1,
                     2.1e1,
                     9.8,
-                ]
+                ],
             ),
             Ar=np.array([3.2e3, 3.0e2, 2.4e2, 2.7e1, 1.3e1]),
             Ge=np.array([1.1e4, 1.4e3, 1.2e3, 1.7e2, 1.2e2, 3.5e1, 1.5e1, 6.5e0]),
@@ -188,14 +173,15 @@ def get_migdal_transitions_probability_iterators(
             shells.append(Shell(state, material, binding_e, model, p))
 
     elif model == "Cox":
-        element = wr.cox_migdal_model(
+        cox_migdal_model = wr.cox_migdal_model(
             material,
             dipole=dipole,
             dark_matter=dark_matter,
             e_threshold=e_threshold,
+            **kwargs
         )
 
-        for state, binding_e in element.orbitals:
+        for state, binding_e in cox_migdal_model.orbitals:
             if not any(fnmatch(state, take) for take in considered_shells):
                 continue
 
@@ -205,10 +191,9 @@ def get_migdal_transitions_probability_iterators(
                     material,
                     binding_e * nu.keV,
                     model,
-                    single_ionization_probability=create_cox_probability_function(
-                        element,
+                    single_ionization_probability=_create_cox_probability_function(
+                        cox_migdal_model,
                         state,
-                        material,
                         dipole=dipole,
                     ),
                 )
@@ -230,10 +215,93 @@ def vmin_migdal(
     return np.maximum(0, y)
 
 
+def get_diff_rate(
+    w: float,
+    shells: list[Shell],
+    mw: float,
+    sigma_nucleon: float,
+    halo_model: wr.StandardHaloModel,
+    interaction: str,
+    m_med: float,
+    migdal_model: str,
+    include_approx_nr: bool,
+    q_nr: float,
+    material: str,
+    t: Optional[float],
+    **kwargs,
+):
+    result = 0
+    for shell in shells:
+
+        def diff_rate(v, erec):
+            # Observed energy = energy of emitted electron
+            #                 + binding energy of state
+            eelec = w - shell.binding_e - include_approx_nr * erec * q_nr
+            if eelec < 0:
+                return 0
+
+            if migdal_model == "Ibe":
+                return (
+                    # Usual elastic differential rate,
+                    # common constants follow at end
+                    wr.sigma_erec(
+                        erec,
+                        v,
+                        mw,
+                        sigma_nucleon,
+                        interaction,
+                        m_med=m_med,
+                        material=material,
+                    )
+                    * v
+                    * halo_model.velocity_dist(v, t)
+                    # Migdal effect |Z|^2
+                    # TODO: ?? what is explicit (eV/c)**2 doing here?
+                    * (nu.me * (2 * erec / wr.mn(material)) ** 0.5 / (nu.eV / nu.c0))
+                    ** 2
+                    / (2 * np.pi)
+                    * np.nan_to_num(shell(eelec))
+                )
+            elif migdal_model == "Cox":
+                vrec = (2 * erec / wr.mn(material)) ** 0.5 / nu.c0
+                input_points = wr.pairwise_log_transform(eelec/nu.keV, vrec)
+                return (
+                    wr.sigma_erec(
+                        erec,
+                        v,
+                        mw,
+                        sigma_nucleon,
+                        interaction,
+                        m_med=m_med,
+                        material=material,
+                    )
+                    * v
+                    * halo_model.velocity_dist(v, t)
+                    * np.nan_to_num(shell(input_points)) / nu.keV
+                )
+
+        # Note dblquad expects the function to be f(y, x), not f(x, y)...
+        result += dblquad(
+            diff_rate,
+            0,
+            wr.e_max(mw, wr.v_max(t, halo_model.v_esc), wr.mn(material)),
+            lambda erec: vmin_migdal(
+                w=w - include_approx_nr * erec * q_nr,
+                erec=erec,
+                mw=mw,
+                material=material,
+            ),
+            lambda _: wr.v_max(t, halo_model.v_esc),
+            **kwargs,
+        )[0]
+
+    return result
+
+
 @export
-@wr.vectorize_first
+@memory.cache(ignore=["multi_processing", "progress_bar"])
 def rate_migdal(
-    w: np.ndarray,
+    w: Union[np.ndarray, float],
     mw: float,
     sigma_nucleon: float,
     interaction: str = "SI",
@@ -243,11 +311,13 @@ def rate_migdal(
     material: str = "Xe",
     t: Optional[float] = None,
     halo_model: Optional[wr.StandardHaloModel] = None,
-    consider_shells: Optional[list[str]] = None,
+    consider_shells: Optional[tuple[str]] = None,
     migdal_model: str = "Ibe",
     dark_matter: bool = True,
     dipole: bool = False,
     e_threshold: Optional[float] = None,
+    progress_bar: bool = False,
+    multi_processing: Optional[Union[bool, int]] = True,
     **kwargs,
 ) -> np.ndarray:
     """Differential rate per unit detector mass and deposited ER energy of
@@ -279,7 +349,20 @@ def rate_migdal(
     Further kwargs are passed to scipy.integrate.quad numeric integrator
     (e.g. error tolerance).
     """
+    _is_array = True
+    if not isinstance(w, np.ndarray):
+        if isinstance(w, float):
+            _is_array = False
+            w = np.array([w])
+        else:
+            raise ValueError("w must be a float or a numpy array")
+
     halo_model = wr.StandardHaloModel() if halo_model is None else halo_model
+
+    if progress_bar:
+        prog_bar = tqdm
+    else:
+        prog_bar = lambda x, *args, **kwargs: x
 
     if not consider_shells:
         consider_shells = _default_shells(material)
@@ -293,72 +376,54 @@ def rate_migdal(
         dark_matter=dark_matter,
     )
 
-    result = 0
-    for shell in shells:
-
-        def diff_rate(v, erec):
-            # Observed energy = energy of emitted electron
-            #                 + binding energy of state
-            eelec = w - shell.binding_e - include_approx_nr * erec * q_nr
-            if eelec < 0:
-                return 0
-
-            if migdal_model == "Ibe":
-                return (
-                    # Usual elastic differential rate,
-                    # common constants follow at end
-                    wr.sigma_erec(
-                        erec,
-                        v,
-                        mw,
-                        sigma_nucleon,
-                        interaction,
-                        m_med=m_med,
-                        material=material,
-                    )
-                    * v
-                    * halo_model.velocity_dist(v, t)
-                    # Migdal effect |Z|^2
-                    # TODO: ?? what is explicit (eV/c)**2 doing here?
-                    * (nu.me * (2 * erec / wr.mn(material)) ** 0.5 / (nu.eV / nu.c0))
-                    ** 2
-                    / (2 * np.pi)
-                    * shell(eelec)
-                )
-            elif migdal_model == "Cox":
-                return (
-                    wr.sigma_erec(
-                        erec,
-                        v,
-                        mw,
-                        sigma_nucleon,
-                        interaction,
-                        m_med=m_med,
-                        material=material,
-                    )
-                    * v
-                    * halo_model.velocity_dist(v, t)
-                    * shell(eelec, erec)
-                )
-
-        # Note dblquad expects the function to be f(y, x), not f(x, y)...
-        r = dblquad(
-            diff_rate,
-            0,
-            wr.e_max(mw, wr.v_max(t, halo_model.v_esc), wr.mn(material)),
-            lambda erec: vmin_migdal(
-                w=w - include_approx_nr * erec * q_nr,
-                erec=erec,
+    if multi_processing and not dipole:
+        multi_processing = None if isinstance(multi_processing, bool) else multi_processing
+        with ProcessPoolExecutor(multi_processing) as executor:
+            partial_get_diff_rate = partial(
+                get_diff_rate,
+                shells=shells,
                 mw=mw,
+                sigma_nucleon=sigma_nucleon,
+                halo_model=halo_model,
+                interaction=interaction,
+                m_med=m_med,
+                migdal_model=migdal_model,
+                include_approx_nr=include_approx_nr,
+                q_nr=q_nr,
                 material=material,
-            ),
-            lambda _: wr.v_max(t, halo_model.v_esc),
-            **kwargs,
-        )[0]
+                t=t,
+            )
 
-        result += r
+            n_workers = os.cpu_count() if multi_processing is None else multi_processing
+            results = list(
+                prog_bar(
+                    executor.map(partial_get_diff_rate, w),
+                    desc=f"Computing rates (MP={n_workers} workers)",
+                    total=len(w),
+                )
+            )
+    else:
+        results = []
+        for val in prog_bar(w, desc="Computing rates"):
+            results.append(
+                get_diff_rate(
+                    val,
+                    shells,
+                    mw,
+                    sigma_nucleon,
+                    halo_model,
+                    interaction,
+                    m_med,
+                    migdal_model,
+                    include_approx_nr,
+                    q_nr,
+                    material,
+                    t,
+                )
+            )
 
-    return halo_model.rho_dm / mw * (1 / wr.mn(material)) * np.array(result)
+    results = np.array(results) if _is_array else float(results[0])
+    return halo_model.rho_dm / mw * (1 / wr.mn(material)) * results
 
 
 @wr.deprecated("Use get_migdal_transitions_probability_iterators instead")
