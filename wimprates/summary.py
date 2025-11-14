@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 export, __all__ = wr.exporter()
 
 @export
-@memory.cache(ignore=["multi_processing", "progress_bar"])
+@memory.cache
 def rate_wimp(es, mw, sigma_nucleon, interaction='SI',
               detection_mechanism='elastic_nr', m_med=float('inf'),
               t=None, halo_model=None, 
