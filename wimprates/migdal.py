@@ -263,7 +263,10 @@ def get_diff_rate(
                     * np.nan_to_num(shell(eelec))
                 )
             elif migdal_model == "Cox":
+                V_MIN_COX = 1e-5  # smallest tabulated v/c in the Cox DM tables
                 vrec = (2 * erec / wr.mn(material)) ** 0.5 / nu.c0
+                v_eval = max(vrec, V_MIN_COX)
+                scale = (vrec / v_eval) ** 2
                 input_points = wr.pairwise_log_transform(eelec/nu.keV, vrec)
                 return (
                     wr.sigma_erec(
@@ -277,7 +280,7 @@ def get_diff_rate(
                     )
                     * v
                     * halo_model.velocity_dist(v, t)
-                    * np.nan_to_num(shell(input_points)) / nu.keV
+                    * np.nan_to_num(shell(input_points)) * scale / nu.keV
                 )
 
         # Note dblquad expects the function to be f(y, x), not f(x, y)...
