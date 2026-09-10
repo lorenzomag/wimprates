@@ -59,6 +59,7 @@ class Shell:
     binding_e: float
     model: str
     single_ionization_probability: Callable  # to assign interpolators to
+    v_min: float = 1e-5
 
     def __call__(self, *args, **kwargs) -> np.ndarray:
         return self.single_ionization_probability(*args, **kwargs)
@@ -181,9 +182,12 @@ def get_migdal_transitions_probability_iterators(
             **kwargs
         )
 
+
         for state, binding_e in cox_migdal_model.orbitals:
             if not any(fnmatch(state, take) for take in considered_shells):
                 continue
+
+            v_min = float(np.exp(cox_migdal_model._dpI1_orbital[state].get_knots()[1][0]))
 
             shells.append(
                 Shell(
@@ -196,6 +200,7 @@ def get_migdal_transitions_probability_iterators(
                         state,
                         dipole=dipole,
                     ),
+                    v_min=v_min,
                 )
             )
     else:
@@ -263,11 +268,10 @@ def get_diff_rate(
                     * np.nan_to_num(shell(eelec))
                 )
             elif migdal_model == "Cox":
-                V_MIN_COX = 1e-5  # smallest tabulated v/c in the Cox DM tables
                 vrec = (2 * erec / wr.mn(material)) ** 0.5 / nu.c0
-                v_eval = max(vrec, V_MIN_COX)
+                v_eval = max(vrec, shell.v_min)
                 scale = (vrec / v_eval) ** 2
-                input_points = wr.pairwise_log_transform(eelec/nu.keV, vrec)
+                input_points = wr.pairwise_log_transform(eelec/nu.keV, v_eval)
                 return (
                     wr.sigma_erec(
                         erec,
