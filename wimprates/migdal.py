@@ -86,7 +86,7 @@ def _default_shells(material: str) -> tuple[str]:
         # For Xe, only consider n=3 and n=4
         # n=5 is the valence band so unreliable in liquid
         # n=1,2 contribute very little
-        Xe=["1*", "2*", "3*", "4*"],
+        Xe=["3*", "4*"],
         # TODO, what are realistic values for Ar?
         Ar=["2*"],
         # EDELWEIS
@@ -187,7 +187,10 @@ def get_migdal_transitions_probability_iterators(
             if not any(fnmatch(state, take) for take in considered_shells):
                 continue
 
-            v_min = float(np.exp(cox_migdal_model._dpI1_orbital[state].get_knots()[1][0]))
+            if dipole:
+                v_min = 0.0
+            else:
+                v_min = float(np.exp(cox_migdal_model._dpI1_orbital[state].get_knots()[1][0]))
 
             shells.append(
                 Shell(
@@ -284,7 +287,7 @@ def get_diff_rate(
                     )
                     * v
                     * halo_model.velocity_dist(v, t)
-                    * np.nan_to_num(shell(input_points)) * scale / nu.keV
+                    * np.nan_to_num(shell(input_points)).item() * scale / nu.keV
                 )
 
         # Note dblquad expects the function to be f(y, x), not f(x, y)...
