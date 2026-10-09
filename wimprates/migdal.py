@@ -101,11 +101,23 @@ def _create_cox_probability_function(
     orbital: str,
     dipole: bool = False,
 ) -> Callable[..., np.ndarray[Any, Any]]:
-    
-    fn_name = "dpI1dipole" if dipole else "dpI1"
-    fn = getattr(cox_migdal_model, fn_name)
+    # Equivalent to cox_migdal_model.dpI1(dipole)(points, orbital=orbital), but only
+    # keeps a reference to the orbital's interpolator instead of the whole Migdal
+    # instance, so the shells stay picklable for multiprocessing (e.g. the
+    # CubicSplines in the Migdal instance cannot be pickled with scipy 1.18.0)
+    if dipole:
+        interpolator = cox_migdal_model._dpI1_dipole_orbital[orbital]
+    else:
+        interpolator = cox_migdal_model._dpI1_orbital[orbital]
 
-    return partial(fn, orbital=orbital)
+    return partial(_cox_orbital_probability, interpolator, dipole=dipole)
+
+
+def _cox_orbital_probability(interpolator, points, dipole: bool = False) -> np.ndarray:
+    # Mirrors Migdal.dpI1 and Migdal.dpI1dipole for a single orbital
+    if dipole:
+        return np.exp(interpolator(points))
+    return np.exp(interpolator.ev(points[:, 0], points[:, 1]))
 
 
 @export
