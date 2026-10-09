@@ -159,7 +159,8 @@ def rate_dme(erec, n, l, mw, sigma_dme,
         # so we only have to do a single integral
         def diff_xsec(q):
             vmin = v_min_dme(eb, erec, q, mw)
-            result = q * dme_ionization_ff(shell, erec, q) * f_dm(q)**2
+            # .item(): quad needs a scalar, dme_ionization_ff returns a 1-element array
+            result = q * dme_ionization_ff(shell, erec, q).item() * f_dm(q)**2
             # Note the interpolator is in kms, not unit-carrying numbers
             # see above
             result *= inverse_mean_speed_kms(vmin / (nu.km/nu.s))
@@ -172,7 +173,7 @@ def rate_dme(erec, n, l, mw, sigma_dme,
         # Have to do double integral
         # Note dblquad expects the function to be f(y, x), not f(x, y)...
         def diff_xsec(v, q):
-            result = q * dme_ionization_ff(shell, erec, q) * f_dm(q)**2
+            result = q * dme_ionization_ff(shell, erec, q).item() * f_dm(q)**2
             result *= 1 / v * halo_model.velocity_dist(v, t)
             return result
 
