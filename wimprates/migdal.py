@@ -320,6 +320,16 @@ def get_diff_rate(
     return result
 
 
+def _get_diff_rate_in_worker(w: float, base_units: dict, **kwargs):
+    # Workers started with spawn/forkserver re-import numericalunits, so their units
+    # differ from the parent's if it called nu.reset_units(). Use the parent's units.
+    if any(getattr(nu, unit) != value for unit, value in base_units.items()):
+        for unit, value in base_units.items():
+            setattr(nu, unit, value)
+        nu.set_derived_units_and_constants()
+    return get_diff_rate(w, **kwargs)
+
+
 @export
 @memory.cache(ignore=["multi_processing", "progress_bar"])
 def rate_migdal(
@@ -402,7 +412,8 @@ def rate_migdal(
         multi_processing = None if isinstance(multi_processing, bool) else multi_processing
         with ProcessPoolExecutor(multi_processing) as executor:
             partial_get_diff_rate = partial(
-                get_diff_rate,
+                _get_diff_rate_in_worker,
+                base_units={unit: getattr(nu, unit) for unit in ("m", "kg", "s", "C", "K")},
                 shells=shells,
                 mw=mw,
                 sigma_nucleon=sigma_nucleon,
