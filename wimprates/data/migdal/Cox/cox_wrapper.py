@@ -5,14 +5,25 @@ the interpolators, then returning the Migdal class instance once they've been in
 The working directory is then reset.
 """
 
-from functools import lru_cache
+from contextlib import redirect_stdout
+from functools import cache, lru_cache
+import io
 import os
 import sys
 
-from .cox_submodule.Migdal import Migdal
+# Cox's module prints a citation banner when imported. Capture it here (wimprates
+# is re-imported by every multiprocessing worker) and print it once, the first
+# time the model is actually used
+with redirect_stdout(io.StringIO()) as _cox_banner:
+    from .cox_submodule.Migdal import Migdal
 import wimprates as wr
 
 export, __all__ = wr.exporter()
+
+
+@cache
+def _print_cox_banner():
+    print(_cox_banner.getvalue(), end="")
 
 
 @export
@@ -37,6 +48,7 @@ def cox_migdal_model(element: str, **kwargs) -> Migdal:
         This wrapper function changes the working directory temporarily, instantiates the Migdal class, 
         and then resets the working directory back to its original state.
     """
+    _print_cox_banner()
     original_cwd = os.getcwd()
 
     try:
