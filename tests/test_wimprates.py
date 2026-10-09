@@ -29,7 +29,8 @@ class TestBenchmarks(unittest.TestCase):
         # Test vectorized call
         energies = np.linspace(0.01, 40, 100)
         dr = wr.rate_wimp_std(energies, **self.opts)
-        self.assertEqual(dr[0], wr.rate_wimp_std(0.01, **self.opts))
+        # Can differ in the last bit depending on the platform
+        self.assertAlmostEqual(dr[0], wr.rate_wimp_std(0.01, **self.opts), delta=1e-12 * dr[0])
 
 
     def test_lightmediator(self):
