@@ -3,6 +3,21 @@
 History
 -------
 
+0.6.0 (2026-10-09)
+------------------
+ * Add the Cox et al. Migdal model ([arXiv:2208.12222](https://arxiv.org/abs/2208.12222)), including the dipole approximation, alongside Ibe et al.
+ * Optional multiprocessing for Migdal rates (`multi_processing` argument)
+ * Cache results on disk with joblib (in `~/.cache/wimprates`)
+ * Add `j2000_to_datetime` utility
+ * Use logging instead of print statements
+ * Fix Cox Migdal probability below the tabulated velocity range (scaled as v^2 below the lowest tabulated velocity)
+ * Fix Migdal multiprocessing with the Cox model under scipy 1.18.0
+ * Fix wrong Migdal multiprocessing results after `numericalunits.reset_units()` when workers are started with spawn/forkserver
+ * Fix `rate_dme` crash with NumPy 2.4
+ * Print the default-parameters warning and the Cox citation banner once per run instead of once per worker
+ * Remove undeclared dependency on `packaging`
+ * Fix tests: remove stale cache options, compare elastic rates with a relative tolerance
+
 0.5.0 (2023-02-13)
 ------------------
  * Change default v_0 and v_pec to match [current conventions](https://arxiv.org/abs/2105.00599) (#14)
