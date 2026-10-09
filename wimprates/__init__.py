@@ -1,8 +1,10 @@
 __version__ = '0.5.0'
 
-from packaging import version
-if version.parse(__version__) < version.parse('0.6.0'):
-    import logging
+import logging
+import multiprocessing
+
+# Only warn in the main process, not again in every multiprocessing worker
+if multiprocessing.parent_process() is None:
     logger = logging.getLogger(__name__)
     logger.warning(
         'Default WIMP parameters are changed in accordance with '

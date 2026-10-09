@@ -14,17 +14,17 @@ import unittest
 class TestBenchmarks(unittest.TestCase):
     opts = dict(mw=50,
                 sigma_nucleon=1e-45,
-                save_cache=False,
-                load_cache=False,
                 )
     def test_elastic(self):
         ref = 30.39515403337126
 
-        self.assertAlmostEqual(wr.rate_wimp_std(1, **self.opts), ref)
+        # Relative tolerance: the result drifts by ~3e-9 (relative) between
+        # scipy versions, which is more than 7 decimal places for a rate ~30
+        self.assertAlmostEqual(wr.rate_wimp_std(1, **self.opts), ref, delta=1e-7 * ref)
 
         # Test numericalunits.reset_units() does not affect results
         nu.reset_units(123)
-        self.assertAlmostEqual(wr.rate_wimp_std(1, **self.opts), ref)
+        self.assertAlmostEqual(wr.rate_wimp_std(1, **self.opts), ref, delta=1e-7 * ref)
 
         # Test vectorized call
         energies = np.linspace(0.01, 40, 100)
@@ -76,7 +76,7 @@ class TestBenchmarks(unittest.TestCase):
         self.assertAlmostEqual(wr.rate_wimp_std(1,
                                                 halo_model=halo_model,
                                                 **self.opts,
-                                                ), ref)
+                                                ), ref, delta=1e-7 * ref)
 
 
     def test_v_earth_old(self):
